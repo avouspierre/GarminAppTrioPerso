@@ -1,0 +1,46 @@
+<layout id="WatchFace">
+    <drawable class="Background" />
+
+    <!-- Time -->
+    <text-area id="TimeLabel" width="fill" height="20%" x="center" y="10%" font="Graphics.FONT_LARGE" justification="Graphics.TEXT_JUSTIFY_CENTER" color="Graphics.COLOR_WHITE" />
+
+    <!-- Header -->
+    <drawable class="HeaderDrawable" />
+
+    <drawable id="line1" />
+
+    <!-- Center -->
+    <!-- IOB on the left -->
+    <label id="IOBLabel" text="10.5U" x="2%" y="50%" font="Gfx.FONT_MEDIUM" color="Graphics.COLOR_BLUE" justification="Graphics.TEXT_JUSTIFY_LEFT|Gfx.TEXT_JUSTIFY_VCENTER" />
+    
+    <!-- ISF icon and COB/sensRatio in center -->
+    <!-- Note: No x/y coordinates, will be set dynamically -->
+    <bitmap id="ISFIcon" filename="../drawables/UpDown.svg" scaleX="8%" scaleY="8%" scaleRelativeTo="screen">
+        <palette>
+            <color>00FF00</color>
+        </palette>
+    </bitmap>
+    <label id="COBLabel" text="48" x="50%" y="50%" font="Gfx.FONT_MEDIUM" color="Graphics.COLOR_GREEN" justification="Graphics.TEXT_JUSTIFY_CENTER|Gfx.TEXT_JUSTIFY_VCENTER" />
+    
+    <!-- Eventual BG icon and value on the right -->
+    <!-- Note: No x/y coordinates, will be set dynamically -->
+    <bitmap id="EventualIcon" filename="../drawables/Flat.svg" scaleX="6%" scaleY="6%" scaleRelativeTo="screen">
+        <palette>
+            <color>FFFFFF</color>
+        </palette>
+    </bitmap>
+    <label id="EventualBGLabel" text="5.5" x="98%" y="50%" font="Gfx.FONT_MEDIUM" color="Graphics.COLOR_WHITE" justification="Graphics.TEXT_JUSTIFY_RIGHT|Gfx.TEXT_JUSTIFY_VCENTER" />
+
+    <drawable id="line2" />
+
+    <!-- Info -->
+    <drawable id="HeartRate" />
+    <label id="HRLabel" text="73" x="30%" y="68%" font="Gfx.FONT_TINY" color="Graphics.COLOR_LT_GRAY" justification="Graphics.TEXT_JUSTIFY_LEFT|Gfx.TEXT_JUSTIFY_VCENTER" />
+    
+    <drawable id="StepsIcon" />
+    <label id="StepsLabel" text="12345" x="58%" y="68%" font="Gfx.FONT_TINY" color="Graphics.COLOR_LT_GRAY" justification="Graphics.TEXT_JUSTIFY_LEFT|Gfx.TEXT_JUSTIFY_VCENTER" />
+
+    <!-- Date -->
+    <text-area id="DateLabel" width="fill" height="20%" x="center" y="75%" font="Graphics.FONT_SYSTEM_LARGE" justification="Graphics.TEXT_JUSTIFY_CENTER" color="Graphics.COLOR_WHITE" />
+
+</layout>

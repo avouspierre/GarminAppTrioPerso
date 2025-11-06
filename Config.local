@@ -1,0 +1,35 @@
+# Default developer settings - This file is committed to git
+# Create ConfigOverride.local to override these with your personal settings
+
+# Path to your Connect IQ SDK
+# macOS example:
+SDK_HOME = /Users/YourUsername/Library/Application\ Support/Garmin/ConnectIQ/Sdks/connectiq-sdk-mac-8.3.0-2025-09-22-5813687a0
+
+# Windows example:
+# SDK_HOME = C:/Users/YourUsername/AppData/Roaming/Garmin/ConnectIQ/Sdks/connectiq-sdk-win-8.3.0
+
+# Linux example:
+# SDK_HOME = /home/yourusername/garmin/connectiq-sdk-linux-8.3.0
+
+# Your preferred device for testing
+# Common devices: fenix7, fenix6, enduro3, epix2, venu3, forerunner965, etc.
+DEVICE = fenix7
+
+# Path to your developer key
+PRIVATE_KEY = $(HOME)/.ssh/developer_key
+
+# Deploy location (when device is connected)
+# macOS:
+DEPLOY = /Volumes/GARMIN/GARMIN/APPS/
+
+# Windows:
+# DEPLOY = E:/GARMIN/APPS/
+
+# Linux:
+# DEPLOY = /media/garmin/GARMIN/APPS/
+
+# Optional: Enable verbose output
+# VERBOSE = false
+
+# Optional: Set build number for releases
+# BUILD_NUMBER = 0
