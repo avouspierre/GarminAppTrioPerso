@@ -195,8 +195,8 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
                 "isf" => status["isf"],
                 "sensRatio" => status["sensRatio"],
                 "units_hint" => status["units_hint"],
-                "displayDataType1" => status["displayDataType1"],
-                "displayDataType2" => status["displayDataType2"],
+                "displayDataType1" => status["displayPrimaryAttributeChoice"],
+                "displayDataType2" => status["displaySecondaryAttributeChoice"],
                 "date" => status["date"]
             };
         }
