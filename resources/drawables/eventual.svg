@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="330" height="330" viewBox="0 0 330 330" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <g transform="matrix(41,0,0,31.9185,-4048.75,-4305.1)">
+        <!-- Dotted horizontal line with three gaps and three dots -->
+        <!-- First dot -->
+        <circle cx="99.2" cy="140.0475" r="0.45"/>
+        <!-- Second dot -->
+        <circle cx="101.0" cy="140.0475" r="0.45"/>
+        <!-- Third dot -->
+        <circle cx="102.8" cy="140.0475" r="0.45"/>
+        
+        <!-- Arrow head (right pointing triangle, larger and further) -->
+        <path d="M106.8,140.047L104.5,138.2L104.5,141.894L106.8,140.047Z" style="fill-rule:nonzero;"/>
+    </g>
+</svg>

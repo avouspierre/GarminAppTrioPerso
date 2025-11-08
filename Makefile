@@ -2,31 +2,34 @@ include properties.mk
 appName = `grep entry manifest.xml | sed 's/.*entry="\([^"]*\).*/\1/'`
 devices = `grep 'iq:product id' manifest.xml | sed 's/.*iq:product id="\([^"]*\).*/\1/'`
 
-# Default target
 .DEFAULT_GOAL := help
 
-# Help target - shows available commands
 help:
 	@echo "Garmin Connect IQ Makefile Commands:"
+	@echo ""
+	@echo "Building:"
 	@echo "  make build         - Build for default device ($(DEVICE))"
 	@echo "  make buildall      - Build for all devices in manifest"
-	@echo "  make run           - Build and run in simulator"
-	@echo "  make test          - Build and run unit tests"
-	@echo "  make clean         - Remove all built files"
-	@echo "  make package       - Create .iq file for Connect IQ store"
-	@echo "  make deploy        - Copy built .prg to device/folder"
-	@echo "  make check         - Run type checking (strict mode)"
-	@echo "  make sim           - Just start the simulator"
+	@echo "  make choose        - Interactive device selection and build"
 	@echo "  make release       - Build optimized release version"
 	@echo "  make debug         - Build debug version with profiling"
+	@echo ""
+	@echo "Running:"
+	@echo "  make sim           - Start the simulator (leave it running)"
+	@echo "  make install       - Install to running simulator"
+	@echo "  make run           - Build and install to simulator"
+	@echo "  make choose-run    - Choose device, build, and run"
+	@echo "  make test          - Build and run unit tests"
+	@echo ""
+	@echo "Other:"
+	@echo "  make clean         - Remove all built files"
+	@echo "  make package       - Create .iq file for Connect IQ store"
 	@echo "  make devices       - List all supported devices"
 	@echo "  make validate      - Validate manifest and resources"
-	@echo "  make show-config   - Show current configuration"
 	@echo ""
 	@echo "Current settings:"
 	@echo "  App Name: $(appName)"
 	@echo "  Device: $(DEVICE)"
-	@echo "  SDK: $(SDK_HOME)"
 
 # Standard build
 build:
@@ -50,19 +53,67 @@ buildall:
 		--warn; \
 	done
 
-# Build and run in simulator
-run: build
-	@"$(SDK_HOME)/bin/connectiq" &
-	@echo "Waiting for simulator to start..."
-	@sleep 5
-	@"$(SDK_HOME)/bin/monkeydo" bin/$(appName).prg $(DEVICE) || \
-	(echo "Retrying connection to simulator..." && sleep 3 && \
-	"$(SDK_HOME)/bin/monkeydo" bin/$(appName).prg $(DEVICE))
+# Interactive device selection and build
+choose:
+	@echo "Available devices:"
+	@PS3="Select device number: "; \
+	select device in $(devices); do \
+		if [ -n "$$device" ]; then \
+			echo "Building for $$device..."; \
+			"$(SDK_HOME)/bin/monkeyc" \
+			--jungles ./monkey.jungle \
+			--device $$device \
+			--output bin/$(appName)-$$device.prg \
+			--private-key $(PRIVATE_KEY) \
+			--warn; \
+			echo "Built: bin/$(appName)-$$device.prg"; \
+			break; \
+		else \
+			echo "Invalid selection"; \
+		fi; \
+	done
 
-# Just start the simulator without building
+# Interactive device selection, build, and run
+choose-run:
+	@echo "Available devices:"
+	@PS3="Select device number: "; \
+	select device in $(devices); do \
+		if [ -n "$$device" ]; then \
+			echo "Building for $$device..."; \
+			"$(SDK_HOME)/bin/monkeyc" \
+			--jungles ./monkey.jungle \
+			--device $$device \
+			--output bin/$(appName)-$$device.prg \
+			--private-key $(PRIVATE_KEY) \
+			--warn && \
+			echo "Checking for simulator..." && \
+			(pgrep -q -f "connectiq" || (echo "Starting simulator..." && "$(SDK_HOME)/bin/connectiq" &)) && \
+			sleep 3 && \
+			echo "Installing to simulator..." && \
+			"$(SDK_HOME)/bin/monkeydo" bin/$(appName)-$$device.prg $$device; \
+			break; \
+		else \
+			echo "Invalid selection"; \
+		fi; \
+	done
+
+# Build and install to simulator (uses existing sim if running)
+run: build
+	@echo "Checking for running simulator..."
+	@pgrep -q -f "connectiq" || (echo "Starting simulator..." && "$(SDK_HOME)/bin/connectiq" &)
+	@sleep 3
+	@echo "Installing to simulator..."
+	@"$(SDK_HOME)/bin/monkeydo" bin/$(appName).prg $(DEVICE)
+
+# Just start the simulator
 sim:
-	@"$(SDK_HOME)/bin/connectiq" &
-	@echo "Simulator started"
+	@if pgrep -q -f "connectiq"; then \
+		echo "Simulator already running"; \
+	else \
+		echo "Starting simulator..."; \
+		"$(SDK_HOME)/bin/connectiq" & \
+		echo "Wait 10-15 seconds for simulator window to appear"; \
+	fi
 
 # Build with debug symbols and profiling support
 debug:
@@ -87,7 +138,7 @@ release:
 	--optimization 2 \
 	--warn
 
-# Run unit tests
+# Run unit tests (uses existing sim if running)
 test:
 	"$(SDK_HOME)/bin/monkeyc" \
 	--jungles ./monkey.jungle \
@@ -96,8 +147,9 @@ test:
 	--private-key $(PRIVATE_KEY) \
 	--unit-test \
 	--warn
-	@"$(SDK_HOME)/bin/connectiq" &
-	@sleep 5
+	@echo "Checking for running simulator..."
+	@pgrep -q -f "connectiq" || (echo "Starting simulator..." && "$(SDK_HOME)/bin/connectiq" &)
+	@sleep 3
 	@"$(SDK_HOME)/bin/monkeydo" bin/$(appName)-test.prg $(DEVICE) -t
 
 # Type checking with strict mode
@@ -156,7 +208,7 @@ validate:
 	@grep -o 'uses-permission id="[^"]*"' manifest.xml | sort | uniq -d | sed 's/uses-permission id="/Duplicate: /;s/"//'
 	@echo "Validation complete"
 
-# Watch for changes and rebuild (requires fswatch or inotifywait)
+# Watch for changes and rebuild (requires fswatch)
 watch:
 	@echo "Watching for changes (requires fswatch)..."
 	@fswatch -o source/ resources* manifest.xml | while read f; do make build; done
@@ -194,19 +246,27 @@ optimize-speed:
 	--warn
 	@echo "Built performance-optimized version"
 
-# Install to simulator (without building)
+# Install to simulator (without building) - assumes sim is running
 install:
+	@echo "Installing to simulator..."
 	@"$(SDK_HOME)/bin/monkeydo" bin/$(appName).prg $(DEVICE)
 
-# Run in simulator with debug output
+# Build debug and run (uses existing sim if running)
 run-debug: debug
-	@"$(SDK_HOME)/bin/connectiq" &
-	@echo "Waiting for simulator to start..."
-	@sleep 5
+	@echo "Checking for running simulator..."
+	@pgrep -q -f "connectiq" || (echo "Starting simulator..." && "$(SDK_HOME)/bin/connectiq" &)
+	@sleep 3
 	@"$(SDK_HOME)/bin/monkeydo" bin/$(appName)-debug.prg $(DEVICE)
+
+# Kill all stuck simulator processes
+kill-sim:
+	@echo "Killing stuck simulator processes..."
+	@pkill -9 -f monkeydo || true
+	@pkill -9 -f "bin/sh.*monkeydo" || true
+	@echo "Done. Run 'make sim' to start fresh."
 
 # Create all common build variants
 all: clean build release debug optimize-size optimize-speed
 	@echo "Built all variants"
 
-.PHONY: help build buildall run sim debug release test check clean deploy package package-all devices validate watch stats optimize-size optimize-speed install run-debug all
+.PHONY: help build buildall choose choose-run run sim debug release test check clean deploy package package-all devices validate watch stats optimize-size optimize-speed install run-debug kill-sim all

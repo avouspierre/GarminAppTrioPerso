@@ -1,11 +1,11 @@
 # Default configuration - these can be overridden by Config.local
 # This file is committed to git
-
 # Try to include local developer settings (not in git)
 -include ConfigOverride.local
 
 # Default SDK path (macOS standard location)
-SDK_HOME ?= $(HOME)/Library/Application\ Support/Garmin/ConnectIQ/Sdks/connectiq-sdk-mac-8.3.0-2025-09-22-5813687a0
+# Note: Use quotes for paths with spaces in shell commands
+SDK_HOME ?= $(HOME)/Library/Application Support/Garmin/ConnectIQ/Sdks/connectiq-sdk-mac-8.3.0-2025-09-22-5813687a0
 
 # Default device for testing
 DEVICE ?= fenix7
@@ -25,20 +25,22 @@ VERBOSE ?= false
 APP_NAME := $(shell grep entry manifest.xml | sed 's/.*entry="\([^"]*\).*/\1/')
 SDK_BIN := $(SDK_HOME)/bin
 
-# Validate that SDK exists
-ifeq ($(wildcard $(SDK_BIN)/monkeyc),)
-    $(warning SDK not found at $(SDK_HOME))
-    $(warning Please create ConfigOverride.local and set SDK_HOME to your Connect IQ SDK path)
+# Validate that SDK exists - use shell test instead of wildcard for paths with spaces
+SDK_EXISTS := $(shell if [ -f "$(SDK_BIN)/monkeyc" ]; then echo "yes"; else echo "no"; fi)
+
+ifeq ($(SDK_EXISTS),no)
+$(warning SDK not found at $(SDK_HOME))
+$(warning Please create ConfigOverride.local and set SDK_HOME to your Connect IQ SDK path)
 endif
 
 # Show current configuration (can be called with make show-config)
 show-config:
 	@echo "Current Configuration:"
-	@echo "  SDK_HOME: $(SDK_HOME)"
-	@echo "  DEVICE: $(DEVICE)"
-	@echo "  PRIVATE_KEY: $(PRIVATE_KEY)"
-	@echo "  DEPLOY: $(DEPLOY)"
-	@echo "  APP_NAME: $(APP_NAME)"
+	@echo " SDK_HOME: $(SDK_HOME)"
+	@echo " DEVICE: $(DEVICE)"
+	@echo " PRIVATE_KEY: $(PRIVATE_KEY)"
+	@echo " DEPLOY: $(DEPLOY)"
+	@echo " APP_NAME: $(APP_NAME)"
 	@echo ""
 	@if [ -f ConfigOverride.local ]; then \
 		echo "Using local overrides from ConfigOverride.local"; \
