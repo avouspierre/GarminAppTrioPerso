@@ -82,13 +82,10 @@ class ArcGoalGraphView extends BaseView {
     var penWidth = 13;
     var radius = (self.radius - penWidth / 2).toNumber();
     dc.setPenWidth(penWidth);
-    var startDegree = self.getStartDegree();
+    
     var endDegree = self.getEndDegree();
 
-    // Define glucose range boundaries (mg/dL)
-    // Arc covers 40-220 mg/dL range across the full arc angle
-    var minGlucose = 40.0;
-    var maxGlucose = 220.0;
+
     
     // Define color zones based on glucose values:
     // Red: 40-70 (hypoglycemia)
