@@ -1,14 +1,19 @@
 /**
- * Trio Watchface View
- * 
- * Main display view for Trio diabetes management watchface.
+ * Trio Widget View
+ *
+ * Main display view for Trio diabetes management widget.
  * Renders glucose data, insulin information, and system status.
- * 
+ *
  * LAYOUT STRUCTURE:
- * - Top Section: IOB (left), Middle metric (center), TBR/EventualBG (right)
- * - Middle Section: Delta (left), Glucose+Arrow (center), Loop status (right)
- * - Bottom Section: Time, Date, Heart Rate, Battery (from layout XML)
- * 
+ * - Top Section: Glucose arc graph centered on screen
+ *   - Glucose value (large font, centered at 35% height)
+ *   - Delta value (to the right of glucose value)
+ * - Bottom Section (at 70% height):
+ *   - IOB (15% width, left)
+ *   - Direction arrow bitmap (46% width, center)
+ *   - Middle metric - COB/ISF/sensRatio (65% width, center-right)
+ *   - Loop status circle with minutes inside (88% width, right)
+ *
  * DATA INTERFACE:
  * Receives data from Application.Storage["status"] containing:
  * - sgv: Sensor glucose value (mg/dL)
@@ -24,27 +29,15 @@
  * - displayDataType1: Middle metric selector ("cob", "isf", "sensRatio")
  * - displayDataType2: Right metric selector ("tbr", "eventualBG")
  * - date: Last update timestamp (ms since epoch)
- * 
+ *
  * ENERGY OPTIMIZATION FEATURES:
  * 1. Bitmap Caching: Direction arrows loaded once at init
  * 2. Dimension Caching: Screen size queried once at layout
  * 3. Font Metrics Caching: Font measurements done once at layout
  * 4. Dictionary Optimization: All data extracted once per update
- * 
- * SCREEN / FONT CALCULATIONS:
- * - Baseline alignment for consistent text positioning
- * - Proportional spacing relative to screen width
- * - Dynamic font selection based on screen size
- * - Adaptive icon positioning with proper spacing
- * 
- * DYNAMIC PLACEMENT:
- * - Center-based positioning for middle metric
- * - Edge-based positioning for side elements
- * - Available space calculation for flexible layout
- * - Icon and text grouping for visual cohesion
- * 
+ *
  * @author Trio Development Team
- * @version 2.0 (Energy Optimized)
+ * @version 3.0 (Widget with Optimized Layout)
  */
 
 import Toybox.Application;
@@ -55,11 +48,9 @@ import Toybox.WatchUi;
 using Toybox.Time.Gregorian as Calendar;
 import Toybox.ActivityMonitor;
 import Toybox.Activity;
-import Toybox.Time;
 import Sura.Device;
-import Sura.Datetime;
 
-class TrioWatchfaceView extends WatchUi.WatchFace {
+class TrioView extends WatchUi.View {
 
     /**
      * ENERGY OPTIMIZATION: Cached direction arrow bitmaps
@@ -80,21 +71,6 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
      */
     private var cachedFontMetrics = null;
 
-    /**
-     * Font definition used for rendering the primary time digits on the watch face.
-     *
-     * Type: Graphics.FontDefinition
-     * Default: Graphics.FONT_NUMBER_MEDIUM
-     *
-     * This setting controls the font family and size used when drawing the time.
-     * Change to another Graphics.FONT_* constant to alter size/appearance. Ensure
-     * the chosen font is available on the target device and remains legible at
-     * the watch's screen resolution.
-     *
-     * Typical usage:
-     *  - Passed to Graphics.setFont() before drawing time text
-     *  - Supplied to Graphics.drawText() when rendering numeric time values
-     */
     var timeFontSize as Graphics.FontDefinition = Graphics.FONT_NUMBER_MEDIUM;
     var smallFont = Graphics.FONT_XTINY;
     var smallFontSize = Graphics.getFontHeight(smallFont);
@@ -102,18 +78,11 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
     var offsetX as Number = 50;
     
     /**
-     * Flag indicating if the watch face is in low power mode.
-     * When true, the watch face will use minimal power consumption settings.
-     * @var {Boolean} isLowPowerMode
-     */
-    var isLowPowerMode = false;
-    
-    /**
      * Constructor
      * Loads all bitmap resources to avoid repeated loading during updates
      */
     function initialize() {
-        WatchFace.initialize();
+        View.initialize();
         
         directionBitmaps = {
             "Unknown" => WatchUi.loadResource(Rez.Drawables.Unknown),
@@ -132,12 +101,12 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
      * 
      * SCREEN CALCULATION OPTIMIZATION:
      * Caches screen dimensions and font metrics to eliminate repeated queries.
-     * These values never change during watchface lifetime.
+     * These values never change during widget lifetime.
      * 
      * @param dc Drawing context for metric queries
      */
     function onLayout(dc as Dc) as Void {
-        setLayout(Rez.Layouts.WatchFace(dc));
+        setLayout(Rez.Layouts.MainLayout(dc));
         
         screenWidth = dc.getWidth();
         screenHeight = dc.getHeight();
@@ -174,9 +143,6 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
      * Extracts all required values from storage dictionary ONCE to minimize
      * repeated dictionary key lookups. Creates a working copy for functions.
      * 
-     * Previous implementation called helper functions that each performed
-     * their own dictionary lookups, resulting in significant overhead.
-     * 
      * @param dc Drawing context for rendering
      */
     function onUpdate(dc as Dc) as Void {
@@ -201,96 +167,14 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
             };
         }
 
-        Datetime.init();
-
-        //setTime();
-        setDate();
-        setHeartRate();
-        setSteps();
-        
         View.onUpdate(dc);
         
         drawTopSection(dc, statusData);
         drawMiddleSection(dc, statusData);
 
-         //draw the time
-        drawTime(dc);
-
     }
 
-    /*
-     * drawTime(dc as Dc) as Void
-     *
-     * Draws the watch face time elements (hours/minutes and, when enabled, seconds)
-     * onto the provided drawing context.
-     *
-     * Parameters:
-     *   dc  - Dc object representing the drawing context used to render text and
-     *         shapes on the device screen.
-     *
-     * Behavior:
-     *   - Sets the drawing color to white with a transparent background.
-     *   - Chooses vertical centering for text alignment.
-     *   - Renders the main time string (hours and minutes) using a numeric font.
-     *     The horizontal position of the main time is offset from the right edge
-     *     of the screen; the exact offset scales depending on whether the selected
-     *     font is the "hot" numeric font.
-     *   - If the watch is not in low power mode (self.isLowPowerMode == false),
-     *     renders the seconds as a smaller text element slightly below the
-     *     vertical center line.
-     *
-     * Notes:
-     *   - AM/PM rendering is present in the source but currently commented out.
-     *   - Positioning uses Device.screenSize and Device.screenCenter to adapt to
-     *     different screen sizes and orientations.
-     *   - This function has visible side effects: it draws directly to the
-     *     provided Dc and thus must be invoked only from appropriate drawing
-     *     callbacks (eg. onUpdate or paint handlers).
-     *
-     * Side Effects:
-     *   - Modifies the provided drawing context (dc) by drawing text elements.
-     *
-     * Assumptions:
-     *   - Variables such as offsetX, smallFont, smallFontSize, and self.isLowPowerMode
-     *     are available in the enclosing scope.
-     *   - Datetime.getTimeText() and Datetime.getSecondsText() return formatted
-     *     strings suitable for display.
-     */
-    function drawTime(dc as Dc) as Void {
-            var textAlign = Graphics.TEXT_JUSTIFY_VCENTER;
-            var timeFontSize = Graphics.FONT_NUMBER_HOT;
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-
-            // Time
-            dc.drawText(
-            Device.screenSize.x -
-                offsetX * (timeFontSize == Graphics.FONT_NUMBER_HOT ? 1.9 : 0.75),
-            Device.screenCenter.y*1.11,
-            timeFontSize,
-            Datetime.getTimeText(),
-            textAlign
-            );
-
-            // // AM/PM
-            // dc.drawText(
-            // Device.screenSize.x - 10,
-            // Device.screenCenter.y - smallFontSize / 2,
-            // smallFont,
-            // Datetime.getAmPm(),
-            // textAlign
-            // );
-
-            if (!self.isLowPowerMode) {
-            // Seconds
-            dc.drawText(
-                Device.screenSize.x - 50,
-                Device.screenCenter.y + smallFontSize / 2,
-                smallFont,
-                Datetime.getSecondsText(),
-                textAlign
-            );
-        }
-    }
+    
     
     /**
      * Unit system detector
@@ -328,9 +212,12 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
     
     /**
      * Top section renderer
-     * 
-     * Displays glucose value with arc graph, delta, and units.
-     * 
+     *
+     * Displays glucose value with arc graph centered on screen.
+     * - Glucose value: Large font (FONT_NUMBER_HOT) at 35% height
+     * - Delta value: Positioned to the right of glucose value
+     * - Arc graph: Centered using Device.screenCenter
+     *
      * @param dc Drawing context
      * @param statusData Extracted data dictionary
      */
@@ -346,18 +233,17 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
         var arcGraphRadius = Device.screenCenter.getMin() - 8;
             BGGraph.setPosition(
             Device.screenCenter.x,
-            Device.screenCenter.x
+            Device.screenCenter.y
         );
 
-        var glucoseFont = Graphics.FONT_NUMBER_MILD;
-        var deltaFont = Graphics.FONT_SYSTEM_TINY;
+        // Use larger font for glucose display
+        var glucoseFont = Graphics.FONT_NUMBER_HOT;
+        var deltaFont = Graphics.FONT_LARGE;
 
         var glucoseText = "--";
         var deltaText = "--";
         var glucose = 40;
        
-        var glucoseHeight =  cachedFontMetrics["glucoseHeight"]; 
-        var deltaHeight =   cachedFontMetrics["deltaHeight"];
         var primaryColor = getApp().getProperty("PrimaryColor") as Number;
      
         
@@ -387,33 +273,42 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
         BGGraph.setData({ :value => glucose, :goal => 220 });
         BGGraph.draw(dc);
 
-
-        var glucoseX = screenWidth * 0.35;
-        var glucoseY = (screenHeight * 0.1);
-        var glucoseWidth = dc.getTextWidthInPixels(glucoseText, Graphics.FONT_NUMBER_MILD) as Number;
+        // Center the glucose value horizontally and vertically
+        var glucoseY = screenHeight * 0.35;
+        
+        // Calculate glucose text width to position delta to the right
+        var glucoseWidth = dc.getTextWidthInPixels(glucoseText, glucoseFont);
+        var glucoseX = (screenWidth - glucoseWidth) / 2 - screenWidth * 0.1;
 
         dc.setColor(primaryColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(glucoseX , 
-                    glucoseY, 
-                    glucoseFont, 
-                    glucoseText, 
-                    Graphics.TEXT_JUSTIFY_LEFT);
+        dc.drawText(glucoseX,
+                    glucoseY,
+                    glucoseFont,
+                    glucoseText,
+                    Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
 
+        // Display delta to the right of glucose value
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(glucoseX  + glucoseWidth + screenWidth * 0.03,
-                    glucoseY + (glucoseHeight - deltaHeight) * 0.5,
+        dc.drawText(glucoseX + glucoseWidth + screenWidth * 0.05,
+                    glucoseY,
                     deltaFont,
                     deltaText,
-                    Graphics.TEXT_JUSTIFY_LEFT);    
+                    Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
         
     }
 
     /**
-     * Middle section renderer
-     * 
-     * Displays IOB, middle metric (sensRatio/isf/cob), glucose trend arrow,
-     * and loop status indicator based on data age.
-     * 
+     * Bottom section renderer (at 70% height)
+     *
+     * Displays four metrics in a horizontal row:
+     * - IOB: Blue text at 15% width (left)
+     * - Direction arrow: Bitmap at 46% width (center)
+     * - Middle metric: COB/ISF/sensRatio at 65% width (center-right)
+     * - Loop status: Colored circle (25px radius) with minutes text inside at 88% width (right)
+     *
+     * Loop circle color indicates data freshness:
+     * - Green: 0-7 minutes, Yellow: 8-12 minutes, Red: >12 minutes, Gray: No data
+     *
      * @param dc Drawing context
      * @param statusData Extracted data dictionary
      */
@@ -522,29 +417,26 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
 
         }
 
-         var textY = screenHeight * 0.33;
+         var textY = screenHeight * 0.70;
+         var largeFont = Graphics.FONT_LARGE;
 
+        // Display IOB on the left (larger)
+        dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(screenWidth * 0.20, textY, largeFont, iobValue + "U",
+                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
-        // display IOB
-        var viewIOB = View.findDrawableById("IOBLabel") as Text;
-        viewIOB.setText(iobValue + "U");
-
-        
-        // display glucose arrow
-        var viewArrow = View.findDrawableById("ISFIcon");
-        viewArrow.locX = -100;
+        // Display glucose arrow in center
         var arrowBitmap = getDirectionBitmap(statusData);
         if (arrowBitmap != null) {
-            dc.drawBitmap(screenWidth *0.4, textY*0.9, arrowBitmap);
+            dc.drawBitmap(screenWidth * 0.40, textY - 15, arrowBitmap);
         }
 
-        // display middle value
-        var middleLabel = View.findDrawableById("COBLabel") as Text;
-        middleLabel.setColor(primaryColor);
-        middleLabel.setText(middleValue);   
+        // Display middle value (COB/ISF/sensRatio) in center-right
+        dc.setColor(primaryColor, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(screenWidth * 0.6, textY, largeFont, middleValue,
+                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
-    
-        // display loop minutes and loop status indicator          
+        // Display loop status indicator on the right with circle
         var loopText;
         if (loopMinutes < 0) {
             loopText = "--";
@@ -553,23 +445,23 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
         } else {
             loopText = loopMinutes.format("%d");
         }
-        var loopHeight = cachedFontMetrics["loopHeight"];
-      
 
-        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(
-            screenWidth *0.83,
-            textY,
-            Graphics.FONT_XTINY,
-            loopText,
-            Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER
-        );
+        var loopX = screenWidth * 0.85;
+        var loopY = textY;
+        var circleRadius = 25;
         
-
+        // Draw the colored circle first with thicker border
         var loopColor = getLoopColor(loopMinutes);
         dc.setColor(loopColor, Graphics.COLOR_TRANSPARENT);
-        dc.setPenWidth(6);
-        dc.drawCircle(screenWidth *0.85, textY, loopHeight * 0.5);
+        dc.setPenWidth(8);
+        dc.drawCircle(loopX, loopY, circleRadius);
+        
+        // Draw the loop minutes text centered inside the circle with smaller font
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(loopX, loopY,
+                    Graphics.FONT_TINY,
+                    loopText,
+                    Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
     }
 
@@ -666,14 +558,6 @@ class TrioWatchfaceView extends WatchUi.WatchFace {
     }
 
     function onHide() as Void {
-    }
-
-    function onExitSleep() as Void {
-        self.isLowPowerMode = false;
-    }
-
-    function onEnterSleep() as Void {
-        self.isLowPowerMode = true;
     }
 
     /**

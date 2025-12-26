@@ -1,7 +1,7 @@
 /**
- * Trio Watchface Application
+ * Trio Widget Application
  * 
- * Main application class for Trio diabetes management watchface.
+ * Main application class for Trio diabetes management widget.
  * Handles background data synchronization and application lifecycle.
  * 
  * ENERGY OPTIMIZATION STRATEGY (Fixed):
@@ -12,7 +12,7 @@
  * - Backup sync via temporal events fires regularly
  * 
  * @author Trio Development Team
- * @version 2.1 (Fixed - Removed excessive timer resets)
+ * @version 2.1 (Converted to Widget)
  */
 
 import Toybox.Application;
@@ -24,7 +24,7 @@ import Toybox.System;
 import Toybox.Communications;
 
 (:background)
-class TrioWatchfaceApp extends Application.AppBase {
+class TrioApp extends Application.AppBase {
 
     private var inBackground = false;
 
@@ -128,18 +128,28 @@ class TrioWatchfaceApp extends Application.AppBase {
     }
 
     /**
-     * Initial view provider
-     * 
-     * @return Array containing the main watchface view
+     * Initial view provider for widget
+     *
+     * @return Array containing the main widget view
      */
     function getInitialView() as [Views] or [Views, InputDelegates] {
-        return [ new TrioWatchfaceView() ] as [Views];
+        return [ new TrioView() ] as [Views];
+    }
+
+    /**
+     * Glance view provider
+     *
+     * @return Array containing the glance view for widget menu
+     */
+    (:glance)
+    function getGlanceView() as [GlanceView] or Null {
+        return [ new TrioGlanceView() ] as [GlanceView];
     }
 
     /**
      * Settings change handler
      * 
-     * Triggers UI update when user modifies watchface settings
+     * Triggers UI update when user modifies widget settings
      * (e.g., colors, display preferences).
      */
     function onSettingsChanged() as Void {
@@ -162,6 +172,6 @@ class TrioWatchfaceApp extends Application.AppBase {
  * 
  * @return Current application instance
  */
-function getApp() as TrioWatchfaceApp {
-    return Application.getApp() as TrioWatchfaceApp;
+function getApp() as TrioApp {
+    return Application.getApp() as TrioApp;
 }

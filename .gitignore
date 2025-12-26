@@ -61,6 +61,7 @@ bin/
 *.prg
 *.iq
 *.prg.debug.xml
+dist/
 
 # IDE specific files
 .vscode/settings.json

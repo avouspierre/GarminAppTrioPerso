@@ -8,7 +8,7 @@
 SDK_HOME ?= $(HOME)/Library/Application Support/Garmin/ConnectIQ/Sdks/connectiq-sdk-mac-8.3.0-2025-09-22-5813687a0
 
 # Default device for testing
-DEVICE ?= fenix7
+DEVICE ?= venu445mm
 
 # Default private key location
 PRIVATE_KEY ?= $(HOME)/.ssh/developer_key

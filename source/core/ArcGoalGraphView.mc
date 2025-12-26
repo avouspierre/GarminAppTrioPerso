@@ -10,9 +10,9 @@ class ArcGoalGraphView extends BaseView {
   var color as Graphics.ColorValue = Graphics.COLOR_BLUE;
   var backgroundColor as Number = store.foregroundColor;
   var direction as Graphics.ArcDirection = Graphics.ARC_CLOCKWISE;
-  var radius as Number = 20;
+  var radius as Number = 40;
   var position as String = "bottom";
-  var arcAngleRage as Number = 100;
+  var arcAngleRage as Number = 180;
 
   function initialize(params as {
     :value as Number?,
@@ -83,69 +83,76 @@ class ArcGoalGraphView extends BaseView {
     var radius = (self.radius - penWidth / 2).toNumber();
     dc.setPenWidth(penWidth);
     var startDegree = self.getStartDegree();
+    var endDegree = self.getEndDegree();
 
-    // dc.drawArc(
-    //   self.x,
-    //   self.y,
-    //   radius,
-    //   self.direction,
-    //   startDegree,
-    //   self.getEndDegree()
-    // );
-
+    // Define glucose range boundaries (mg/dL)
+    // Arc covers 40-220 mg/dL range across the full arc angle
+    var minGlucose = 40.0;
+    var maxGlucose = 220.0;
+    
+    // Define color zones based on glucose values:
+    // Red: 40-70 (hypoglycemia)
+    // Yellow: 70-100 (low target)
+    // Green: 100-180 (target range)
+    // Yellow: 180-210 (high target)
+    // Red: 210-250+ (hyperglycemia)
+     
+    // Draw red zone (40-70)
     dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
     dc.drawArc(
       self.x,
       self.y,
       radius,
       self.direction,
-      startDegree,
-      self.getSpecificDegree(20-2)
+      self.getGlucoseDegree(40),
+      self.getGlucoseDegree(70)
     );
-
-
-    dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-    dc.drawArc(
-      self.x,
-      self.y,
-      radius,
-      self.direction,
-     self.getSpecificDegree(20),
-      self.getSpecificDegree(40-2)
-    );
-
-     dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
-    dc.drawArc(
-      self.x,
-      self.y,
-      radius,
-      self.direction,
-      self.getSpecificDegree(40),
-      self.getSpecificDegree(130-2)
-    );
-
-    dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-    dc.drawArc(
-      self.x,
-      self.y,
-      radius,
-      self.direction,
-      self.getSpecificDegree(130),
-     self.getSpecificDegree(155-2)
-    );
-
-    dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
-    dc.drawArc(
-      self.x,
-      self.y,
-      radius,
-      self.direction,
-      self.getSpecificDegree(155),
-      self.getEndDegree()
-    );
-
  
+    // Draw yellow zone (70-100)
+    dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+    dc.drawArc(
+      self.x,
+      self.y,
+      radius,
+      self.direction,
+      self.getGlucoseDegree(70),
+      self.getGlucoseDegree(100)
+    );
+ 
+    // Draw green zone (100-180)
+    dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+    dc.drawArc(
+      self.x,
+      self.y,
+      radius,
+      self.direction,
+      self.getGlucoseDegree(100),
+      self.getGlucoseDegree(180)
+    );
+ 
+    // Draw yellow zone (180-210)
+    dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+    dc.drawArc(
+      self.x,
+      self.y,
+      radius,
+      self.direction,
+      self.getGlucoseDegree(180),
+      self.getGlucoseDegree(210)
+    );
+ 
+    // Draw red zone (210-220)
+    dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
+    dc.drawArc(
+      self.x,
+      self.y,
+      radius,
+      self.direction,
+      self.getGlucoseDegree(210),
+      endDegree
+    );
 
+    // Draw white indicator dot at current glucose position
     var currentDegree = self.getCurrentDegree();
     var circleDotRadius = penWidth * 1;
     
@@ -181,12 +188,30 @@ class ArcGoalGraphView extends BaseView {
   }
 
   function getCurrentDegree() as Number {
+    return self.getGlucoseDegree(self.value);
+  }
+
+  function getGlucoseDegree(glucoseValue as Number) as Number {
     var multiplier = self.getMultiplier();
     var startDegree = self.getStartDegree();
-    var valueMinus40 = self.value.toFloat() < 40 ? 0.0 : self.value.toFloat() - 40.0;
-    var percentage = valueMinus40 / self.goal.toFloat();
-    var displayPercentage = percentage > 1 ? 1 : percentage;
-    var currentDegree = (self.getStartDegree() + (multiplier * self.arcAngleRage * displayPercentage)).toNumber();
+    
+    // Map glucose value (40-250 mg/dL) to arc position
+    var minGlucose = 40.0;
+    var maxGlucose = 250.0;
+    
+    // Clamp glucose value to range
+    var clampedValue = glucoseValue.toFloat();
+    if (clampedValue < minGlucose) {
+      clampedValue = minGlucose;
+    } else if (clampedValue > maxGlucose) {
+      clampedValue = maxGlucose;
+    }
+    
+    // Calculate percentage across the range (0.0 to 1.0)
+    var percentage = (clampedValue - minGlucose) / (maxGlucose - minGlucose);
+    
+    // Calculate degree position
+    var currentDegree = (startDegree + (multiplier * self.arcAngleRage * percentage)).toNumber();
 
     if (currentDegree == startDegree) {
       return currentDegree + multiplier;
@@ -195,17 +220,8 @@ class ArcGoalGraphView extends BaseView {
     return currentDegree;
   }
 
+  // Keep for backward compatibility but now uses getGlucoseDegree
   function getSpecificDegree(specificValue as Number) as Number {
-    var multiplier = self.getMultiplier();
-    var startDegree = self.getStartDegree();
-    var percentage = specificValue.toFloat() / self.goal.toFloat();
-    var displayPercentage = percentage > 1 ? 1 : percentage;
-    var currentDegree = (self.getStartDegree() + (multiplier * self.arcAngleRage * displayPercentage)).toNumber();
-
-    if (currentDegree == startDegree) {
-      return currentDegree + multiplier;
-    }
-
-    return currentDegree;
+    return self.getGlucoseDegree(specificValue);
   }
 }
