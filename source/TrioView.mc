@@ -98,11 +98,11 @@ class TrioView extends WatchUi.View {
 
     /**
      * Layout initialization handler
-     * 
+     *
      * SCREEN CALCULATION OPTIMIZATION:
      * Caches screen dimensions and font metrics to eliminate repeated queries.
      * These values never change during widget lifetime.
-     * 
+     *
      * @param dc Drawing context for metric queries
      */
     function onLayout(dc as Dc) as Void {
@@ -138,17 +138,27 @@ class TrioView extends WatchUi.View {
 
     /**
      * Main update handler
-     * 
+     *
      * DATA EXTRACTION OPTIMIZATION:
      * Extracts all required values from storage dictionary ONCE to minimize
      * repeated dictionary key lookups. Creates a working copy for functions.
-     * 
+     *
      * @param dc Drawing context for rendering
      */
     function onUpdate(dc as Dc) as Void {
-        var status = Application.Storage.getValue("status") as Dictionary;
+        var statusRaw = Application.Storage.getValue("status");
+        var status = statusRaw as Dictionary;
+        var allSGVValue = [] as Array;
+        if (statusRaw instanceof Array) {
+            // Status is an array, take the first value
+            if (statusRaw.size() > 0) {
+                status = statusRaw[0] as Dictionary;
+                allSGVValue = statusRaw;
+            }
+        }
 
         var statusData = null;
+        
         if (status instanceof Dictionary) {
             statusData = {
                 "sgv" => status["sgv"],
@@ -170,15 +180,15 @@ class TrioView extends WatchUi.View {
         View.onUpdate(dc);
         
         drawTopSection(dc, statusData);
-        drawMiddleSection(dc, statusData);
+        drawMiddleSection(dc, statusData,allSGVValue);
 
     }
 
-    
-    
+
+
     /**
      * Unit system detector
-     * 
+     *
      * @param statusData Extracted data dictionary
      * @return true if mmol/L units, false if mg/dL
      */
@@ -192,10 +202,10 @@ class TrioView extends WatchUi.View {
     
     /**
      * Glucose value unit converter
-     * 
+     *
      * Converts mg/dL values to mmol/L when required.
      * Conversion factor: 1 mg/dL = 0.05556 mmol/L
-     * 
+     *
      * @param value Glucose value in mg/dL
      * @param statusData Data dictionary for unit detection
      * @return Converted value (mmol/L if indicated, otherwise mg/dL)
@@ -243,10 +253,10 @@ class TrioView extends WatchUi.View {
         var glucoseText = "--";
         var deltaText = "--";
         var glucose = 40;
-       
-        var primaryColor = getApp().getProperty("PrimaryColor") as Number;
-     
         
+        var primaryColor = getApp().getProperty("PrimaryColor") as Number;
+      
+         
         BGGraph.setRadius(arcGraphRadius);
         if (statusData instanceof Dictionary) {
             glucose = statusData["sgv"];
@@ -294,7 +304,7 @@ class TrioView extends WatchUi.View {
                     deltaFont,
                     deltaText,
                     Graphics.TEXT_JUSTIFY_LEFT | Graphics.TEXT_JUSTIFY_VCENTER);
-        
+         
     }
 
     /**
@@ -312,13 +322,19 @@ class TrioView extends WatchUi.View {
      * @param dc Drawing context
      * @param statusData Extracted data dictionary
      */
-    function drawMiddleSection(dc as Dc, statusData) as Void {
+    function drawMiddleSection(dc as Dc, statusData, sgvArray) as Void {
         var primaryColor = getApp().getProperty("PrimaryColor") as Number;
 
         var iobValue = "--";
         var middleValue = "";
         var loopMinutes = -1;
+         
+        // Draw SGV graph if sgvArray is available
         
+        if (sgvArray != null && sgvArray.size() > 0) {
+            drawSGVGraph(dc, sgvArray);
+        }
+         
         if (statusData instanceof Dictionary) {
             var iob = statusData["iob"];
             if (iob instanceof Number || iob instanceof Float || iob instanceof Double) {
@@ -333,7 +349,7 @@ class TrioView extends WatchUi.View {
                 var lastLoopSeconds = lastLoopMs / 1000;
                 var now = Time.now().value();
                 var deltaSeconds = now - lastLoopSeconds;
-                
+                 
                 if (deltaSeconds <= 0) {
                     loopMinutes = 0;
                 } else {
@@ -409,7 +425,7 @@ class TrioView extends WatchUi.View {
 
                 } else {
                     middleValue = "--";
-        
+         
                 }
             }
         } else {
@@ -417,23 +433,23 @@ class TrioView extends WatchUi.View {
 
         }
 
-         var textY = screenHeight * 0.70;
+         var textY = screenHeight * 0.8;
          var largeFont = Graphics.FONT_LARGE;
 
         // Display IOB on the left (larger)
         dc.setColor(Graphics.COLOR_BLUE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(screenWidth * 0.20, textY, largeFont, iobValue + "U",
+        dc.drawText(screenWidth * 0.3, textY, largeFont, iobValue + "U",
                     Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
         // Display glucose arrow in center
         var arrowBitmap = getDirectionBitmap(statusData);
         if (arrowBitmap != null) {
-            dc.drawBitmap(screenWidth * 0.40, textY - 15, arrowBitmap);
+            dc.drawBitmap(screenWidth * 0.52, textY - 15, arrowBitmap);
         }
 
         // Display middle value (COB/ISF/sensRatio) in center-right
         dc.setColor(primaryColor, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(screenWidth * 0.6, textY, largeFont, middleValue,
+        dc.drawText(screenWidth * 0.75, textY, largeFont, middleValue,
                     Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
 
         // Display loop status indicator on the right with circle
@@ -446,8 +462,8 @@ class TrioView extends WatchUi.View {
             loopText = loopMinutes.format("%d");
         }
 
-        var loopX = screenWidth * 0.85;
-        var loopY = textY;
+        var loopX = screenWidth * 0.5;
+        var loopY = screenHeight * 0.15;
         var circleRadius = 25;
         
         // Draw the colored circle first with thicker border
@@ -455,7 +471,7 @@ class TrioView extends WatchUi.View {
         dc.setColor(loopColor, Graphics.COLOR_TRANSPARENT);
         dc.setPenWidth(8);
         dc.drawCircle(loopX, loopY, circleRadius);
-        
+         
         // Draw the loop minutes text centered inside the circle with smaller font
         dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
         dc.drawText(loopX, loopY,
@@ -467,11 +483,11 @@ class TrioView extends WatchUi.View {
 
     /**
      * Direction arrow bitmap provider
-     * 
+     *
      * ENERGY OPTIMIZATION: Uses pre-loaded cached bitmaps
      * Maps trend strings to cached bitmap resources.
      * Triple arrows mapped to double arrows (visual simplification).
-     * 
+     *
      * @param statusData Pre-extracted data dictionary
      * @return Bitmap resource for current trend direction
      */
@@ -493,13 +509,13 @@ class TrioView extends WatchUi.View {
     
     /**
      * Loop status color mapper
-     * 
+     *
      * Determines status indicator color based on data age:
      * - <0: No data (gray)
      * - 0-7: Current (green)
      * - 8-12: Slightly stale (yellow)
      * - >12: Stale (red)
-     * 
+     *
      * @param min Minutes since last update
      * @return Color constant for status indicator
      */
@@ -512,6 +528,74 @@ class TrioView extends WatchUi.View {
             return Graphics.COLOR_YELLOW;
         } else {
             return Graphics.COLOR_RED;
+        }
+    }
+    
+    /**
+     * Draws the SGV graph using the sgvArray data
+     *
+     * @param dc Drawing context
+     * @param sgvArray Array of SGV data points
+     */
+    function drawSGVGraph(dc as Dc, sgvArray) as Void {
+        System.println("sgvArray: " + sgvArray );
+        var graphWidth = screenWidth * 0.8;
+        var graphHeight = screenHeight * 0.2;
+        var graphX = (screenWidth - graphWidth) / 2;
+        var graphY = screenHeight * 0.5;
+        
+        // Draw graph background
+        dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
+        dc.drawRectangle(graphX, graphY, graphWidth, graphHeight);
+        
+        // Draw graph axes
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawLine(graphX, graphY, graphX, graphY + graphHeight); // Y-axis
+        dc.drawLine(graphX, graphY + graphHeight, graphX + graphWidth, graphY + graphHeight); // X-axis
+        
+        // Draw dotted lines for sgv = 180 and sgv = 70
+        var y180 = graphY.toFloat() + graphHeight.toFloat() - ((180.toFloat() - 40.toFloat()) / (310.toFloat() - 40.toFloat())) * graphHeight.toFloat();
+        var y70 = graphY.toFloat() + graphHeight.toFloat() - ((70.toFloat() - 40.toFloat()) / (310.toFloat() - 40.toFloat())) * graphHeight.toFloat();
+        
+        dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+        for (var x = graphX.toFloat(); x < graphX.toFloat() + graphWidth.toFloat(); x += 5) {
+            dc.drawLine(x, y180, x + 2, y180);
+            dc.drawLine(x, y70, x + 2, y70);
+        }
+         
+        // Draw SGV data points
+        var maxSGV = 310.0;
+        var minSGV = 40.0;
+        var maxDate = Time.now().value().toLong() * 1000;// Time.now().value().toLong() * 1000;
+        var minDate = sgvArray[0]["date"];
+        
+        // Find the actual max and min dates in the array
+        for (var j = 1; j < sgvArray.size(); j++) {
+            var currentDate = sgvArray[j]["date"];
+            if (currentDate < minDate) {
+                minDate = currentDate;
+            }
+        }
+        
+        System.println("maxDate: " + maxDate + " minDate: " + minDate ); 
+        // Draw data points and lines
+        var x=0;
+        var y=0;
+        for (var i = 0; i < sgvArray.size(); i++) {
+            var sgv = sgvArray[i]["sgv"];
+            var currentDate = sgvArray[i]["date"];
+            if (sgv instanceof Number) {
+                x = graphX + ((currentDate.toFloat() - minDate.toFloat()) / (maxDate.toFloat() - minDate.toFloat()) * graphWidth);
+                y = graphY + graphHeight - ((sgv - minSGV) / (maxSGV - minSGV)) * graphHeight;
+                
+                // Draw data point
+                if (sgv >= 70 && sgv <= 180) {
+                    dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+                } else {
+                    dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
+                }
+                dc.fillCircle(x, y, 5);
+            }
         }
     }
 
@@ -565,8 +649,8 @@ class TrioView extends WatchUi.View {
      * @param dc The device context to clear
      * @return Void
      */
-     function clearScreen(dc as Dc) as Void {
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-        dc.clear();
-    }
+      function clearScreen(dc as Dc) as Void {
+         dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
+         dc.clear();
+     }
 }

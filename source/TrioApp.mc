@@ -22,6 +22,8 @@ import Toybox.Background;
 import Toybox.Time;
 import Toybox.System;
 import Toybox.Communications;
+using Toybox.Math as Mt;
+using Toybox.System as Sys;
 
 (:background)
 class TrioApp extends Application.AppBase {
@@ -56,29 +58,42 @@ class TrioApp extends Application.AppBase {
         }
 
         // Get the current Unix time in milliseconds (matching new structure)
-        var now = Time.now().value();
-        var fourMinutesAgo = now - (240); // 4 minutes ago in seconds
-        var lastLoopDateMs = fourMinutesAgo.toLong() * 1000; // Use Long to avoid overflow
+        // var now = Time.now().value();
+        // var fourMinutesAgo = now - (240); // 4 minutes ago in seconds
+        // var lastLoopDateMs = fourMinutesAgo.toLong() * 1000; 
 
-        // Simulate data for testing in the simulator - mg/dL units
-        var sampleData = {
-            "date" => lastLoopDateMs,
-            "sgv" => 130,
-            "delta" => -27,
-            "direction" => "DoubleUp",
-            "units_hint" => "mgdl",
-            "iob" => 10.9,
-            "tbr" => 1.5,
-            "cob" => 20,
-            "eventualBG" => 85,
-            "isf" => 100,
-            "sensRatio" => 0.95,
-            "displayDataType1" => "cob",
-            "displayDataType2" => "tbr"
-        } as Dictionary;
+        // // Simulate data for testing in the simulator - mg/dL units
+        // var sampleData = [{
+        //     "sgv" => 115,
+        //     "date" => lastLoopDateMs, // In milliseconds
+        //     "delta" => -15,
+        //     "direction" => "FortyFiveDown",
+        //     "units_hint" => "mgdl",
+        //     "iob" => 2.5,
+        //     "cob" => 25,
+        //     "tbr" => 1.45,           // Basal rate in U/hr
+        //     "eventualBG" => 89,
+        //     "isf" => 50,
+        //     "sensRatio" => 0.65,
+        //     "displayPrimaryAttributeChoice" => "sensRatio", // Right side: sensRatio, isf, or cob
+        //     "displaySecondaryAttributeChoice" => "eventualBG" // Middle: eventualBG or tbr
+        // }] as Array;
 
-        // Store the sample data (uncomment to test)
-        //Application.Storage.setValue("status", sampleData);
+        // Math.srand(Sys.getTimer());
+        
+        // for (var i = 1; i < 24; i++) {
+        //     var dateMinutesAgo = now - (300*i);
+        //     var lastDatetLoopMs = dateMinutesAgo.toLong() * 1000;
+        //     var randomValue = 40 + Mt.rand() % 200;
+        //     var newData = {
+        //         "sgv" => randomValue,
+        //         "date" => lastDatetLoopMs
+        //     } as Dictionary;
+        //     sampleData.add(newData);
+        // }
+
+        
+        // Application.Storage.setValue("status", sampleData);
 
     }
 
@@ -123,8 +138,8 @@ class TrioApp extends Application.AppBase {
      */
     function onStop(state as Dictionary?) as Void {
         if(!inBackground) {
-    		Background.deleteTemporalEvent();
-    	}
+     		Background.deleteTemporalEvent();
+     	}
     }
 
     /**
@@ -148,7 +163,7 @@ class TrioApp extends Application.AppBase {
 
     /**
      * Settings change handler
-     * 
+     *
      * Triggers UI update when user modifies widget settings
      * (e.g., colors, display preferences).
      */
@@ -158,7 +173,7 @@ class TrioApp extends Application.AppBase {
 
     /**
      * Background service delegate provider
-     * 
+     *
      * @return Array containing background service delegate for data sync
      */
     function getServiceDelegate() {
@@ -169,7 +184,7 @@ class TrioApp extends Application.AppBase {
 
 /**
  * Global app instance accessor
- * 
+ *
  * @return Current application instance
  */
 function getApp() as TrioApp {

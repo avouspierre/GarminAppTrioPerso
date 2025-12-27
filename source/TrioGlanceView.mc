@@ -26,7 +26,14 @@ class TrioGlanceView extends WatchUi.GlanceView {
      * Called whenever the glance should be refreshed
      */
     function onUpdate(dc as Dc) as Void {
-        var status = Application.Storage.getValue("status") as Dictionary;
+        var statusRaw = Application.Storage.getValue("status");
+        var status = statusRaw as Dictionary;
+        if (statusRaw instanceof Array) {
+            // Status is an array, take the first value
+            if (statusRaw.size() > 0) {
+                status = statusRaw[0] as Dictionary;
+            }
+        }
         
         var glucoseText = "--";
         var glucoseValue = 0;
