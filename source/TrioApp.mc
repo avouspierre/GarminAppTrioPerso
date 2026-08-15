@@ -57,44 +57,70 @@ class TrioApp extends Application.AppBase {
             }
         }
 
-        // Get the current Unix time in milliseconds (matching new structure)
-        // var now = Time.now().value();
-        // var fourMinutesAgo = now - (240); // 4 minutes ago in seconds
-        // var lastLoopDateMs = fourMinutesAgo.toLong() * 1000; 
+        seedSimulatedData();
+    }
 
-        // // Simulate data for testing in the simulator - mg/dL units
-        // var sampleData = [{
-        //     "sgv" => 115,
-        //     "date" => lastLoopDateMs, // In milliseconds
-        //     "delta" => -15,
-        //     "direction" => "FortyFiveDown",
-        //     "units_hint" => "mgdl",
-        //     "iob" => 2.5,
-        //     "cob" => 25,
-        //     "tbr" => 1.45,           // Basal rate in U/hr
-        //     "eventualBG" => 89,
-        //     "isf" => 50,
-        //     "sensRatio" => 0.65,
-        //     "displayPrimaryAttributeChoice" => "sensRatio", // Right side: sensRatio, isf, or cob
-        //     "displaySecondaryAttributeChoice" => "eventualBG" // Middle: eventualBG or tbr
-        // }] as Array;
+    /**
+     * Simulated data seeding - DEBUG BUILDS ONLY
+     *
+     * Fills storage with a synthetic history so the UI can be exercised in the
+     * simulator, where no phone is connected. Readings are timestamped relative
+     * to now, so the loop-age indicator stays meaningful across restarts.
+     *
+     * The (:debug) annotation is the guard: the compiler keeps this version out
+     * of any build made with --release, and links the no-op below instead.
+     * There is no runtime "am I in the simulator" API in Connect IQ, so the
+     * build flavour is what separates the two.
+     *
+     * BEWARE: a debug build sideloaded onto a watch WILL overwrite real
+     * readings with these fake ones. Ship with `make release` or `make package`.
+     */
+    (:debug)
+    function seedSimulatedData() as Void {
+        var now = Time.now().value();
+        var fourMinutesAgo = now - 240;
+        var lastLoopDateMs = fourMinutesAgo.toLong() * 1000;
 
-        // Math.srand(Sys.getTimer());
-        
-        // for (var i = 1; i < 24; i++) {
-        //     var dateMinutesAgo = now - (300*i);
-        //     var lastDatetLoopMs = dateMinutesAgo.toLong() * 1000;
-        //     var randomValue = 40 + Mt.rand() % 200;
-        //     var newData = {
-        //         "sgv" => randomValue,
-        //         "date" => lastDatetLoopMs
-        //     } as Dictionary;
-        //     sampleData.add(newData);
-        // }
+        var sampleData = [{
+            "sgv" => 190,
+            "date" => lastLoopDateMs, // In milliseconds
+            "delta" => -15,
+            "direction" => "FortyFiveDown",
+            "units_hint" => "mmol",
+            "iob" => 2.5,
+            "cob" => 25,
+            "tbr" => 1.45,           // Basal rate in U/hr
+            "eventualBG" => 89,
+            "isf" => 50,
+            "sensRatio" => 0.65,
+            "displayPrimaryAttributeChoice" => "sensRatio", // Right side: sensRatio, isf, or cob
+            "displaySecondaryAttributeChoice" => "eventualBG" // Middle: eventualBG or tbr
+        }] as Array;
 
-        
-        // Application.Storage.setValue("status", sampleData);
+        Mt.srand(Sys.getTimer());
 
+        for (var i = 1; i < 24; i++) {
+            var dateMinutesAgo = now - (300 * i);
+            var lastDatetLoopMs = dateMinutesAgo.toLong() * 1000;
+            var randomValue = 40 + Mt.rand() % 200;
+            var newData = {
+                "sgv" => randomValue,
+                "date" => lastDatetLoopMs
+            } as Dictionary;
+            sampleData.add(newData);
+        }
+
+        Application.Storage.setValue("status", sampleData);
+    }
+
+    /**
+     * Simulated data seeding - RELEASE BUILDS
+     *
+     * Deliberately does nothing: on a real watch the app waits for the phone to
+     * push readings. Fabricating glucose values on a device would be dangerous.
+     */
+    (:release)
+    function seedSimulatedData() as Void {
     }
 
     /**

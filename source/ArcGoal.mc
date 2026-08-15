@@ -12,7 +12,6 @@ class ArcGoalView extends ArcGoalGraphView {
 
   function initialize(params as {
     :value as Number?,
-    :goal as Number?,
     :color as Number?,
     :backgroundColor as Graphics.ColorValue?,
     :direction as Graphics.ArcDirection?,

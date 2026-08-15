@@ -50,8 +50,6 @@ import Toybox.Communications;
 (:background)
 class TrioBGServiceDelegate extends System.ServiceDelegate {
 
-    private var phoneCallback;
-
     /**
      * Constructor
      * 
@@ -115,7 +113,7 @@ class TrioBGServiceDelegate extends System.ServiceDelegate {
      */
     function onPhoneAppMessage(msg) {
         var data = msg.data;
-        Application.Storage.setValue("status", data);
+        Application.Storage.setValue("status", data as Array);
         // if (data instanceof Array) {
         //     if (data.size() > 0) {
         //         var firstEntry = data[0];

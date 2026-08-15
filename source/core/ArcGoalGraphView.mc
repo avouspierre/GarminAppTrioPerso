@@ -6,7 +6,6 @@ import Toybox.Graphics;
 
 class ArcGoalGraphView extends BaseView {
   var value as Number = 0;
-  var goal as Number = 1;
   var color as Graphics.ColorValue = Graphics.COLOR_BLUE;
   var backgroundColor as Number = store.foregroundColor;
   var direction as Graphics.ArcDirection = Graphics.ARC_CLOCKWISE;
@@ -16,7 +15,6 @@ class ArcGoalGraphView extends BaseView {
 
   function initialize(params as {
     :value as Number?,
-    :goal as Number?,
     :color as Graphics.ColorValue?,
     :backgroundColor as Graphics.ColorValue?,
     :direction as Graphics.ArcDirection?,
@@ -26,7 +24,6 @@ class ArcGoalGraphView extends BaseView {
   }) {
     BaseView.initialize();
     var value = params[:value];
-    var goal = 180;  // params[:goal];
     var color = params[:color];
     var backgroundColor = params[:backgroundColor];
     var direction = params[:direction];
@@ -36,9 +33,6 @@ class ArcGoalGraphView extends BaseView {
 
     if (value != null) {
       self.value = value;
-    }
-    if (goal != null) {
-      self.goal = goal;
     }
     if (color != null) {
       self.color = color;
@@ -64,16 +58,11 @@ class ArcGoalGraphView extends BaseView {
     self.radius = radius;
   }
 
-  function setData(params as { :value as Number, :goal as Number }) as Void {
+  function setData(params as { :value as Number }) as Void {
     var value = params[:value];
-    var goal = 180; //params[:goal];
 
     if (value != null) {
       self.value = value;
-    }
-
-    if (goal != null) {
-      self.goal = goal;
     }
   }
   
@@ -87,65 +76,66 @@ class ArcGoalGraphView extends BaseView {
 
 
     
-    // Define color zones based on glucose values:
-    // Red: 40-70 (hypoglycemia)
-    // Yellow: 70-100 (low target)
-    // Green: 100-180 (target range)
-    // Yellow: 180-210 (high target)
-    // Red: 210-250+ (hyperglycemia)
-     
-    // Draw red zone (40-70)
-    dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
+    // Colour zones are derived from GlucoseThresholds so the arc, the trend
+    // graph and the glance all agree on what counts as low or high:
+    //   Red:    ARC_MIN  - VERY_LOW   (severe hypoglycemia)
+    //   Yellow: VERY_LOW - LOW        (hypoglycemia)
+    //   Green:  LOW      - HIGH       (target range)
+    //   Yellow: HIGH     - VERY_HIGH  (hyperglycemia)
+    //   Red:    VERY_HIGH- ARC_MAX    (severe hyperglycemia)
+
+    // Draw severe low zone (ARC_MIN - VERY_LOW)
+    dc.setColor(GlucoseThresholds.getZoneColor(GlucoseThresholds.ZONE_VERY_LOW), Graphics.COLOR_TRANSPARENT);
     dc.drawArc(
       self.x,
       self.y,
       radius,
       self.direction,
-      self.getGlucoseDegree(40),
-      self.getGlucoseDegree(70)
+      self.getGlucoseDegree(GlucoseThresholds.ARC_MIN),
+      self.getGlucoseDegree(GlucoseThresholds.VERY_LOW)
     );
- 
-    // Draw yellow zone (70-100)
-    dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+
+    // Draw low zone (VERY_LOW - LOW)
+    dc.setColor(GlucoseThresholds.getZoneColor(GlucoseThresholds.ZONE_LOW), Graphics.COLOR_TRANSPARENT);
     dc.drawArc(
       self.x,
       self.y,
       radius,
       self.direction,
-      self.getGlucoseDegree(70),
-      self.getGlucoseDegree(100)
+      self.getGlucoseDegree(GlucoseThresholds.VERY_LOW),
+      self.getGlucoseDegree(GlucoseThresholds.LOW)
     );
- 
-    // Draw green zone (100-180)
-    dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
+
+    // Draw in-range zone (LOW - HIGH)
+    dc.setColor(GlucoseThresholds.getZoneColor(GlucoseThresholds.ZONE_IN_RANGE), Graphics.COLOR_TRANSPARENT);
     dc.drawArc(
       self.x,
       self.y,
       radius,
       self.direction,
-      self.getGlucoseDegree(100),
-      self.getGlucoseDegree(180)
+      self.getGlucoseDegree(GlucoseThresholds.LOW),
+      self.getGlucoseDegree(GlucoseThresholds.HIGH)
     );
- 
-    // Draw yellow zone (180-210)
-    dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
+
+    // Draw high zone (HIGH - VERY_HIGH)
+    dc.setColor(GlucoseThresholds.getZoneColor(GlucoseThresholds.ZONE_HIGH), Graphics.COLOR_TRANSPARENT);
     dc.drawArc(
       self.x,
       self.y,
       radius,
       self.direction,
-      self.getGlucoseDegree(180),
-      self.getGlucoseDegree(210)
+      self.getGlucoseDegree(GlucoseThresholds.HIGH),
+      self.getGlucoseDegree(GlucoseThresholds.VERY_HIGH)
     );
- 
-    // Draw red zone (210-220)
-    dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
+
+    // Draw severe high zone (VERY_HIGH - ARC_MAX)
+    dc.setColor(GlucoseThresholds.getZoneColor(GlucoseThresholds.ZONE_VERY_HIGH), Graphics.COLOR_TRANSPARENT);
     dc.drawArc(
       self.x,
       self.y,
       radius,
       self.direction,
-      self.getGlucoseDegree(210),
+      self.getGlucoseDegree(GlucoseThresholds.VERY_HIGH),
       endDegree
     );
 
@@ -192,9 +182,9 @@ class ArcGoalGraphView extends BaseView {
     var multiplier = self.getMultiplier();
     var startDegree = self.getStartDegree();
     
-    // Map glucose value (40-250 mg/dL) to arc position
-    var minGlucose = 40.0;
-    var maxGlucose = 250.0;
+    // Map glucose value (ARC_MIN - ARC_MAX mg/dL) to arc position
+    var minGlucose = GlucoseThresholds.ARC_MIN.toFloat();
+    var maxGlucose = GlucoseThresholds.ARC_MAX.toFloat();
     
     // Clamp glucose value to range
     var clampedValue = glucoseValue.toFloat();

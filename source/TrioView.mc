@@ -33,8 +33,7 @@
  * ENERGY OPTIMIZATION FEATURES:
  * 1. Bitmap Caching: Direction arrows loaded once at init
  * 2. Dimension Caching: Screen size queried once at layout
- * 3. Font Metrics Caching: Font measurements done once at layout
- * 4. Dictionary Optimization: All data extracted once per update
+ * 3. Dictionary Optimization: All data extracted once per update
  *
  * @author Trio Development Team
  * @version 3.0 (Widget with Optimized Layout)
@@ -43,14 +42,20 @@
 import Toybox.Application;
 import Toybox.Graphics;
 import Toybox.Lang;
-import Toybox.System;
 import Toybox.WatchUi;
-using Toybox.Time.Gregorian as Calendar;
-import Toybox.ActivityMonitor;
-import Toybox.Activity;
+import Toybox.Time;
 import Sura.Device;
 
 class TrioView extends WatchUi.View {
+
+    /**
+     * Radius of a plotted glucose point, in pixels.
+     *
+     * Doubles as the vertical margin of the plot area: glucoseToY() insets
+     * the usable range by this much at each end so a point sitting on the
+     * scale limit still draws entirely inside the frame.
+     */
+    const GRAPH_POINT_RADIUS = 5;
 
     /**
      * ENERGY OPTIMIZATION: Cached direction arrow bitmaps
@@ -64,12 +69,14 @@ class TrioView extends WatchUi.View {
      */
     private var screenWidth = 0;
     private var screenHeight = 0;
-    
+
     /**
-     * ENERGY OPTIMIZATION: Cached font metrics
-     * Measured once at layout to avoid repeated font metric calculations
+     * ENERGY OPTIMIZATION: Cached glucose arc gauge
+     * Built once at layout and reused every frame. Its geometry depends only
+     * on screen size, so nothing about it changes between updates - only the
+     * value it displays does.
      */
-    private var cachedFontMetrics = null;
+    private var bgGraph as ArcGoalView? = null;
 
     var timeFontSize as Graphics.FontDefinition = Graphics.FONT_NUMBER_MEDIUM;
     var smallFont = Graphics.FONT_XTINY;
@@ -100,7 +107,7 @@ class TrioView extends WatchUi.View {
      * Layout initialization handler
      *
      * SCREEN CALCULATION OPTIMIZATION:
-     * Caches screen dimensions and font metrics to eliminate repeated queries.
+     * Caches screen dimensions to eliminate repeated queries.
      * These values never change during widget lifetime.
      *
      * @param dc Drawing context for metric queries
@@ -110,27 +117,22 @@ class TrioView extends WatchUi.View {
         
         screenWidth = dc.getWidth();
         screenHeight = dc.getHeight();
-        
-        var mainFont = Graphics.FONT_MEDIUM;
-        var unitFont = Graphics.FONT_XTINY;
-        var glucoseFont = Graphics.FONT_NUMBER_MILD;
-        var deltaFont = Graphics.FONT_SYSTEM_TINY;
-        var secondaryFont = Graphics.FONT_TINY;
-        
-        cachedFontMetrics = {
-            "mainHeight" => dc.getFontHeight(mainFont),
-            "mainDescent" => dc.getFontDescent(mainFont),
-            "unitHeight" => dc.getFontHeight(unitFont),
-            "unitDescent" => dc.getFontDescent(unitFont),
-            "glucoseHeight" => dc.getFontHeight(glucoseFont),
-            "glucoseDescent" => dc.getFontDescent(glucoseFont),
-            "deltaHeight" => dc.getFontHeight(deltaFont),
-            "deltaDescent" => dc.getFontDescent(deltaFont),
-            "loopHeight" => dc.getFontHeight(secondaryFont),
-            "loopDescent" => dc.getFontDescent(secondaryFont)
-        };
 
-         Device.init(dc);
+        Device.init(dc);
+
+        // Build the arc gauge once, now that the screen geometry is known.
+        // onLayout may run again (e.g. on a settings change), so reapply the
+        // geometry rather than rebuilding the object.
+        if (bgGraph == null) {
+            bgGraph = new ArcGoalView({
+                :direction => Graphics.ARC_CLOCKWISE,
+                :color => Graphics.COLOR_DK_BLUE,
+                :position => "top",
+            });
+        }
+
+        bgGraph.setPosition(Device.screenCenter.x, Device.screenCenter.y);
+        bgGraph.setRadius(Device.screenCenter.getMin() - 8);
     }
 
     function onShow() as Void {
@@ -193,13 +195,9 @@ class TrioView extends WatchUi.View {
      * @return true if mmol/L units, false if mg/dL
      */
     function isMMOL(statusData) as Boolean {
-        if (statusData instanceof Dictionary) {
-            var unitsHint = statusData["units_hint"];
-            return (unitsHint != null && unitsHint.equals("mmol"));
-        }
-        return false;
+        return GlucoseUnits.isMMOL(statusData);
     }
-    
+
     /**
      * Glucose value unit converter
      *
@@ -211,13 +209,7 @@ class TrioView extends WatchUi.View {
      * @return Converted value (mmol/L if indicated, otherwise mg/dL)
      */
     function convertGlucoseValue(value, statusData) as Float {
-        if (value instanceof Number) {
-            if (isMMOL(statusData)) {
-                return value * 0.05556;
-            }
-            return value.toFloat();
-        }
-        return 0.0;
+        return GlucoseUnits.convert(value, statusData);
     }
     
     /**
@@ -233,55 +225,38 @@ class TrioView extends WatchUi.View {
      */
     function drawTopSection(dc as Dc, statusData) as Void {
 
-        var BGGraph;
-        BGGraph = new ArcGoalView({
-            :direction => Graphics.ARC_CLOCKWISE,
-            :color => Graphics.COLOR_DK_BLUE,
-            :position => "top",
-        });
-
-        var arcGraphRadius = Device.screenCenter.getMin() - 8;
-            BGGraph.setPosition(
-            Device.screenCenter.x,
-            Device.screenCenter.y
-        );
-
         // Use larger font for glucose display
         var glucoseFont = Graphics.FONT_NUMBER_HOT;
         var deltaFont = Graphics.FONT_LARGE;
 
         var glucoseText = "--";
         var deltaText = "--";
-        var glucose = 40;
-        
+        // Validated up front: the arc must never receive a non-numeric value.
+        var glucose = getArcValue(statusData);
+
         var primaryColor = getApp().getProperty("PrimaryColor") as Number;
-      
-         
-        BGGraph.setRadius(arcGraphRadius);
+
+
         if (statusData instanceof Dictionary) {
-            glucose = statusData["sgv"];
-            if (glucose instanceof Number || glucose instanceof Float || glucose instanceof Double) {
-                var convertedValue = convertGlucoseValue(glucose, statusData);
-                if (isMMOL(statusData)) {
-                    glucoseText = convertedValue.format("%2.1f");
-                } else {
-                    glucoseText = convertedValue.format("%d");
-                }
+            var sgv = statusData["sgv"];
+            if (GlucoseUnits.isNumeric(sgv)) {
+                glucoseText = GlucoseUnits.formatValue(sgv, statusData);
             }
 
             var delta = statusData["delta"];
-            if (delta instanceof Number || delta instanceof Float || delta instanceof Double) {
-                var convertedValue = convertGlucoseValue(delta, statusData);
+            if (GlucoseUnits.isNumeric(delta)) {
                 var sign = (delta >= 0) ? "+" : "";
-                if (isMMOL(statusData)) {
-                    deltaText = sign + convertedValue.format("%2.1f");
-                } else {
-                    deltaText = sign + convertedValue.format("%d");
-                }
+                deltaText = sign + GlucoseUnits.formatValue(delta, statusData);
             }
         }
-        BGGraph.setData({ :value => glucose, :goal => 220 });
-        BGGraph.draw(dc);
+
+        // Reuses the gauge built at layout; only the value changes per frame.
+        // Guarded in case a draw somehow precedes onLayout - the readings
+        // below still render without the gauge.
+        if (bgGraph != null) {
+            bgGraph.setData({ :value => glucose });
+            bgGraph.draw(dc);
+        }
 
         // Center the glucose value horizontally and vertically
         var glucoseY = screenHeight * 0.35;
@@ -370,13 +345,8 @@ class TrioView extends WatchUi.View {
 
             } else if (dataType1 != null && dataType1.equals("isf")) {
                 var isf = statusData["isf"];
-                if (isf instanceof Number || isf instanceof Float || isf instanceof Double) {
-                    var convertedValue = convertGlucoseValue(isf, statusData);
-                    if (isMMOL(statusData)) {
-                        middleValue = convertedValue.format("%2.1f");
-                    } else {
-                        middleValue = convertedValue.format("%d");
-                    }
+                if (GlucoseUnits.isNumeric(isf)) {
+                    middleValue = GlucoseUnits.formatValue(isf, statusData);
                 } else if (isf != null) {
                     middleValue = isf.toString();
                 } else {
@@ -405,13 +375,8 @@ class TrioView extends WatchUi.View {
                     }
     
                 } else if (isf != null) {
-                    if (isf instanceof Number || isf instanceof Float || isf instanceof Double) {
-                        var convertedValue = convertGlucoseValue(isf, statusData);
-                        if (isMMOL(statusData)) {
-                            middleValue = convertedValue.format("%2.1f");
-                        } else {
-                            middleValue = convertedValue.format("%d");
-                        }
+                    if (GlucoseUnits.isNumeric(isf)) {
+                        middleValue = GlucoseUnits.formatValue(isf, statusData);
                     } else {
                         middleValue = isf.toString();
                     }
@@ -538,7 +503,6 @@ class TrioView extends WatchUi.View {
      * @param sgvArray Array of SGV data points
      */
     function drawSGVGraph(dc as Dc, sgvArray) as Void {
-        System.println("sgvArray: " + sgvArray );
         var graphWidth = screenWidth * 0.8;
         var graphHeight = screenHeight * 0.2;
         var graphX = (screenWidth - graphWidth) / 2;
@@ -553,93 +517,164 @@ class TrioView extends WatchUi.View {
         dc.drawLine(graphX, graphY, graphX, graphY + graphHeight); // Y-axis
         dc.drawLine(graphX, graphY + graphHeight, graphX + graphWidth, graphY + graphHeight); // X-axis
         
-        // Draw dotted lines for sgv = 180 and sgv = 70
-        var y180 = graphY.toFloat() + graphHeight.toFloat() - ((180.toFloat() - 40.toFloat()) / (310.toFloat() - 40.toFloat())) * graphHeight.toFloat();
-        var y70 = graphY.toFloat() + graphHeight.toFloat() - ((70.toFloat() - 40.toFloat()) / (310.toFloat() - 40.toFloat())) * graphHeight.toFloat();
-        
+        // Draw dotted lines marking the target range bounds
+        var yHigh = glucoseToY(GlucoseThresholds.HIGH, graphY, graphHeight);
+        var yLow = glucoseToY(GlucoseThresholds.LOW, graphY, graphHeight);
+
         dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
         for (var x = graphX.toFloat(); x < graphX.toFloat() + graphWidth.toFloat(); x += 5) {
-            dc.drawLine(x, y180, x + 2, y180);
-            dc.drawLine(x, y70, x + 2, y70);
+            dc.drawLine(x, yHigh, x + 2, yHigh);
+            dc.drawLine(x, yLow, x + 2, yLow);
         }
-         
+
         // Draw SGV data points
-        var maxSGV = 310.0;
-        var minSGV = 40.0;
         var maxDate = Time.now().value().toLong() * 1000;// Time.now().value().toLong() * 1000;
-        var minDate = sgvArray[0]["date"];
-        
-        // Find the actual max and min dates in the array
-        for (var j = 1; j < sgvArray.size(); j++) {
-            var currentDate = sgvArray[j]["date"];
-            if (currentDate < minDate) {
+
+        // Find the oldest usable date in the array.
+        // Entries with a missing or non-numeric date are skipped rather than
+        // crashing the render: the array comes from the phone and is untrusted.
+        var minDate = null;
+        for (var j = 0; j < sgvArray.size(); j++) {
+            var currentDate = getEntryDate(sgvArray[j]);
+            if (currentDate != null && (minDate == null || currentDate < minDate)) {
                 minDate = currentDate;
             }
         }
-        
-        System.println("maxDate: " + maxDate + " minDate: " + minDate ); 
+
+        // Nothing plottable: leave the empty grid drawn above.
+        if (minDate == null) {
+            return;
+        }
+
+        // Time span of the graph. Zero or negative when the array holds a single
+        // entry, or when the phone clock is ahead of the watch - guarded below
+        // so the ratio is never a division by zero.
+        var dateSpan = (maxDate - minDate).toFloat();
+
         // Draw data points and lines
         var x=0;
         var y=0;
         for (var i = 0; i < sgvArray.size(); i++) {
+            var currentDate = getEntryDate(sgvArray[i]);
+            if (currentDate == null) {
+                continue;
+            }
+
             var sgv = sgvArray[i]["sgv"];
-            var currentDate = sgvArray[i]["date"];
             if (sgv instanceof Number) {
-                x = graphX + ((currentDate.toFloat() - minDate.toFloat()) / (maxDate.toFloat() - minDate.toFloat()) * graphWidth);
-                y = graphY + graphHeight - ((sgv - minSGV) / (maxSGV - minSGV)) * graphHeight;
-                
-                // Draw data point
-                if (sgv >= 70 && sgv <= 180) {
-                    dc.setColor(Graphics.COLOR_GREEN, Graphics.COLOR_TRANSPARENT);
-                } else {
-                    dc.setColor(Graphics.COLOR_ORANGE, Graphics.COLOR_TRANSPARENT);
+                // Subtract as Long before converting: raw ms timestamps exceed
+                // Float precision (~131s granularity at 1.7e12).
+                var ratio = 1.0;
+                if (dateSpan > 0) {
+                    ratio = (currentDate - minDate).toFloat() / dateSpan;
+                    if (ratio < 0.0) {
+                        ratio = 0.0;
+                    } else if (ratio > 1.0) {
+                        ratio = 1.0;
+                    }
                 }
-                dc.fillCircle(x, y, 5);
+
+                x = graphX + (ratio * graphWidth);
+                y = glucoseToY(sgv, graphY, graphHeight);
+
+                // Draw data point, coloured by its glucose zone
+                dc.setColor(GlucoseThresholds.getColor(sgv), Graphics.COLOR_TRANSPARENT);
+                dc.fillCircle(x, y, GRAPH_POINT_RADIUS);
             }
         }
     }
 
-    
     /**
-     * Date display updater
-     * Formats and displays current date (weekday, day, month)
+     * Safe arc value resolver
+     *
+     * The arc gauge drives its needle from this value, and getGlucoseDegree()
+     * clamps it via toFloat() - which returns null for a String, crashing the
+     * comparison that follows. The status payload comes from the phone and is
+     * untrusted, so the value is validated here, before it reaches the gauge,
+     * rather than guarded at each point of use.
+     *
+     * @param statusData Extracted data dictionary
+     * @return Glucose value in mg/dL, or ARC_MIN when there is no usable one
      */
-    function setDate() as Void {
-        var now = Time.now();
-        var info = Calendar.info(now, Time.FORMAT_MEDIUM);
-        var dateStr = Lang.format("$1$ $2$.$3$", [info.day_of_week, info.day, info.month]);
+    function getArcValue(statusData as Object?) as Numeric {
+        if (statusData instanceof Dictionary) {
+            var sgv = statusData["sgv"];
+            if (GlucoseUnits.isNumeric(sgv)) {
+                return sgv as Numeric;
+            }
+        }
 
-        var view = View.findDrawableById("DateLabel") as TextArea;
-        view.setColor(getApp().getProperty("PrimaryColor") as Number);
-        view.setText(dateStr);
+        // No reading: park the indicator at the bottom of the scale.
+        return GlucoseThresholds.ARC_MIN;
     }
 
     /**
-     * Heart rate display updater
-     * Retrieves and displays current heart rate from activity sensor
+     * Glucose to graph Y coordinate mapper
+     *
+     * Projects a glucose value onto the trend graph's vertical axis, which
+     * spans GRAPH_MIN..GRAPH_MAX. Low values map to the bottom of the plot.
+     *
+     * @param value Glucose value in mg/dL
+     * @param graphY Top edge of the plot area
+     * @param graphHeight Height of the plot area
+     * @return Y coordinate for that value
      */
-    function setHeartRate() as Void {
-        var info = Activity.getActivityInfo();
-        var hr = info.currentHeartRate;
+    function glucoseToY(value as Numeric, graphY as Numeric, graphHeight as Numeric) as Float {
+        var minSGV = GlucoseThresholds.GRAPH_MIN.toFloat();
+        var maxSGV = GlucoseThresholds.GRAPH_MAX.toFloat();
 
-        var hrString = (hr == null) ? "--" : hr.toString();
+        // Clamp to the plotted scale. A reading past either bound would
+        // otherwise be drawn outside the frame, on top of the rest of the
+        // screen. Out-of-scale points pin to the edge instead - they keep
+        // their own zone colour, so a 350 still reads as severely high.
+        var clamped = value.toFloat();
+        if (clamped < minSGV) {
+            clamped = minSGV;
+        } else if (clamped > maxSGV) {
+            clamped = maxSGV;
+        }
 
-        var view = View.findDrawableById("HRLabel") as Text;
-        view.setText(hrString);
+        var ratio = (clamped - minSGV) / (maxSGV - minSGV);
+
+        // Inset the usable range by one point radius at each end, so a value
+        // sitting on a scale limit draws its full disc inside the frame
+        // rather than half of it outside. Falls back to the raw height on a
+        // plot too short to carry the margins.
+        var margin = GRAPH_POINT_RADIUS.toFloat();
+        var usableHeight = graphHeight.toFloat() - (2 * margin);
+        if (usableHeight <= 0) {
+            margin = 0.0;
+            usableHeight = graphHeight.toFloat();
+        }
+
+        return graphY.toFloat() + margin + usableHeight - (ratio * usableHeight);
     }
 
     /**
-     * Battery level display updater
-     * Retrieves and displays current battery percentage
+     * Safe timestamp extractor for a glucose entry
+     *
+     * The status array is pushed by the phone and may contain malformed
+     * entries (not a dictionary, missing "date", or a non-numeric date).
+     * Reading such an entry directly crashes the graph renderer on comparison
+     * or arithmetic, so all access goes through this accessor.
+     *
+     * @param entry Candidate glucose entry from the status array
+     * @return Timestamp in milliseconds, or null when unusable
      */
-    function setSteps() as Void {
-        var myStats = System.getSystemStats();
-        var batlevel = myStats.battery;
-        var batString = Lang.format( "$1$%", [ batlevel.format( "%2d" ) ] );
+    function getEntryDate(entry) as Long or Null {
+        if (!(entry instanceof Dictionary)) {
+            return null;
+        }
 
-        var view = View.findDrawableById("StepsLabel") as Text;
-        view.setText(batString);
+        var date = entry["date"];
+        if (date instanceof Number || date instanceof Long ||
+            date instanceof Float || date instanceof Double) {
+            return date.toLong();
+        }
+
+        return null;
     }
+
 
     function onHide() as Void {
     }

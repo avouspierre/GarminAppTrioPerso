@@ -37,23 +37,17 @@ class TrioGlanceView extends WatchUi.GlanceView {
         
         var glucoseText = "--";
         var glucoseValue = 0;
+        var hasGlucose = false;
         var iobText = "--";
         var loopMinutes = -1;
-        
+
         if (status instanceof Dictionary) {
             // Get glucose value
             var glucose = status["sgv"];
-            if (glucose instanceof Number || glucose instanceof Float || glucose instanceof Double) {
+            if (GlucoseUnits.isNumeric(glucose)) {
                 glucoseValue = glucose;
-                var unitsHint = status["units_hint"];
-                var isMMOL = (unitsHint != null && unitsHint.equals("mmol"));
-                
-                if (isMMOL) {
-                    var convertedValue = glucose * 0.05556;
-                    glucoseText = convertedValue.format("%2.1f");
-                } else {
-                    glucoseText = glucose.format("%d");
-                }
+                hasGlucose = true;
+                glucoseText = GlucoseUnits.formatValue(glucose, status);
             }
             
             // Get IOB value
@@ -98,15 +92,12 @@ class TrioGlanceView extends WatchUi.GlanceView {
         var height = dc.getHeight();
         var centerY = height / 2;
         
-        // Determine glucose color based on value (mg/dL)
-        var glucoseColor;
-        if (glucoseValue < 100) {
-            glucoseColor = Graphics.COLOR_GREEN;
-        } else if (glucoseValue > 150) {
-            glucoseColor = Graphics.COLOR_RED;
-        } else {
-            glucoseColor = Graphics.COLOR_WHITE;
-        }
+        // Determine glucose color from the shared thresholds (mg/dL), so the
+        // glance agrees with the arc gauge and the trend graph. Without a
+        // reading, stay neutral rather than colouring a placeholder zero.
+        var glucoseColor = hasGlucose
+            ? GlucoseThresholds.getColor(glucoseValue)
+            : Graphics.COLOR_LT_GRAY;
         
         // Draw glucose value (left, vertically centered, color-coded)
         dc.setColor(glucoseColor, Graphics.COLOR_TRANSPARENT);

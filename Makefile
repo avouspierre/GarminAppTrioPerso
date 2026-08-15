@@ -2,6 +2,40 @@ include properties.mk
 appName = `grep entry manifest.xml | sed 's/.*entry="\([^"]*\).*/\1/'`
 devices = `grep 'iq:product id' manifest.xml | sed 's/.*iq:product id="\([^"]*\).*/\1/'`
 
+# --- Simulator detection -----------------------------------------------------
+# Matching "connectiq" also matched the VS Code Monkey C language server, whose
+# java classpath contains the SDK path. Targets therefore believed the
+# simulator was already up, skipped starting it, and monkeydo failed with
+# "Unable to connect to simulator". The simulator process is named "simulator".
+#
+# Starting it is also not instant (~15-20s to open its control port), so a
+# fixed `sleep 3` was not enough. ensure_sim waits for the port instead.
+#
+# The simulator is launched detached (`open -a`, which hands it to launchd).
+# Backgrounding it from the recipe shell made it a child of make: it then died
+# with make, taking the running app down and leaving the next target to fail
+# with "Unable to connect to simulator".
+SIM_PORT ?= 1234
+SIM_TIMEOUT ?= 60
+SIM_APP = $(SDK_HOME)/bin/ConnectIQ.app
+
+define ensure_sim
+	@pgrep -x simulator >/dev/null 2>&1 || \
+		( echo "Starting simulator..."; open -a "$(SIM_APP)" )
+	@printf "Waiting for simulator (port $(SIM_PORT))"; \
+	n=0; \
+	until nc -z 127.0.0.1 $(SIM_PORT) >/dev/null 2>&1; do \
+		if [ $$n -ge $(SIM_TIMEOUT) ]; then \
+			echo " - timed out after $(SIM_TIMEOUT)s"; \
+			exit 1; \
+		fi; \
+		printf "."; \
+		sleep 1; \
+		n=$$((n+1)); \
+	done; \
+	echo " ready"
+endef
+
 .DEFAULT_GOAL := help
 
 help:
@@ -87,8 +121,15 @@ choose-run:
 			--private-key $(PRIVATE_KEY) \
 			--warn && \
 			echo "Checking for simulator..." && \
-			(pgrep -q -f "connectiq" || (echo "Starting simulator..." && "$(SDK_HOME)/bin/connectiq" &)) && \
-			sleep 3 && \
+			( pgrep -x simulator >/dev/null 2>&1 || \
+				( echo "Starting simulator..."; open -a "$(SIM_APP)" ) ) && \
+			printf "Waiting for simulator (port $(SIM_PORT))" && \
+			n=0 && \
+			until nc -z 127.0.0.1 $(SIM_PORT) >/dev/null 2>&1; do \
+				if [ $$n -ge $(SIM_TIMEOUT) ]; then echo " - timed out"; break; fi; \
+				printf "."; sleep 1; n=$$((n+1)); \
+			done && \
+			echo " ready" && \
 			echo "Installing to simulator..." && \
 			"$(SDK_HOME)/bin/monkeydo" bin/$(appName)-$$device.prg $$device; \
 			break; \
@@ -99,21 +140,19 @@ choose-run:
 
 # Build and install to simulator (uses existing sim if running)
 run: build
-	@echo "Checking for running simulator..."
-	@pgrep -q -f "connectiq" || (echo "Starting simulator..." && "$(SDK_HOME)/bin/connectiq" &)
-	@sleep 3
+	$(ensure_sim)
 	@echo "Installing to simulator..."
 	@"$(SDK_HOME)/bin/monkeydo" bin/$(appName).prg $(DEVICE)
 
 # Just start the simulator
 sim:
-	@if pgrep -q -f "connectiq"; then \
+	@if pgrep -x simulator >/dev/null 2>&1; then \
 		echo "Simulator already running"; \
 	else \
 		echo "Starting simulator..."; \
-		"$(SDK_HOME)/bin/connectiq" & \
-		echo "Wait 10-15 seconds for simulator window to appear"; \
+		open -a "$(SIM_APP)"; \
 	fi
+	$(ensure_sim)
 
 # Build with debug symbols and profiling support
 debug:
@@ -147,9 +186,13 @@ test:
 	--private-key $(PRIVATE_KEY) \
 	--unit-test \
 	--warn
-	@echo "Checking for running simulator..."
-	@pgrep -q -f "connectiq" || (echo "Starting simulator..." && "$(SDK_HOME)/bin/connectiq" &)
-	@sleep 3
+	$(ensure_sim)
+	@echo ""
+	@echo "Running tests in the simulator."
+	@echo "  Results appear in the SIMULATOR window, not here."
+	@echo "  monkeydo stays attached while the app is loaded - this is not a"
+	@echo "  hang. Press Ctrl+C to get your shell back once you have read them."
+	@echo ""
 	@"$(SDK_HOME)/bin/monkeydo" bin/$(appName)-test.prg $(DEVICE) -t
 
 # Type checking with strict mode
@@ -253,16 +296,17 @@ install:
 
 # Build debug and run (uses existing sim if running)
 run-debug: debug
-	@echo "Checking for running simulator..."
-	@pgrep -q -f "connectiq" || (echo "Starting simulator..." && "$(SDK_HOME)/bin/connectiq" &)
-	@sleep 3
+	$(ensure_sim)
 	@"$(SDK_HOME)/bin/monkeydo" bin/$(appName)-debug.prg $(DEVICE)
 
 # Kill all stuck simulator processes
+# Also kills the simulator itself - it only ever killed monkeydo before,
+# despite the name, so a wedged simulator survived every attempt.
 kill-sim:
 	@echo "Killing stuck simulator processes..."
 	@pkill -9 -f monkeydo || true
 	@pkill -9 -f "bin/sh.*monkeydo" || true
+	@pkill -9 -x simulator || true
 	@echo "Done. Run 'make sim' to start fresh."
 
 # Create all common build variants
